@@ -8,7 +8,7 @@
   body { font-family: Arial, sans-serif; background:#f3f4f6; padding:20px; }
   .card { max-width:900px; margin:0 auto 20px; background:#fff; padding:20px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.1);}
   h1 { text-align:center; }
-  input[type=text], textarea { width:100%; padding:8px; margin:6px 0 10px; border-radius:4px; border:1px solid #ccc; }
+  input[type=text], textarea { width:100%; padding:8px; margin:6px 0 10px; border-radius:4px; border:1px solid #ccc; box-sizing: border-box; }
   .opt-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
   .opt-row input[type=radio] { cursor:pointer; }
   .btn { padding:10px 16px; border:none; border-radius:6px; cursor:pointer; font-weight:bold; }
@@ -20,7 +20,7 @@
   .q-opt{margin-left:12px;}
   .q-opt.correct{color:#16a34a;font-weight:bold;}
   .hint{font-size:12px;color:#6b7280;}
-  .link-box{background:#e0f2fe;padding:10px;border-radius:8px;word-break:break-all;margin-top:8px;font-size:13px;}
+  .link-box{background:#e0f2fe;padding:10px;border-radius:8px;word-break:break-all;margin-top:8px;font-size:13px; font-family: monospace; background: #f3f4f6;}
   #copyMsg{color:#16a34a;font-weight:bold;margin-left:8px;}
   label span.req { color:red; }
 </style>
@@ -29,16 +29,16 @@
 <div class="card">
   <h1>Admin - Tạo đề thi</h1>
   <p class="hint">
-    1) Dán <b>GitHub Token</b> của bạn vào ô bên dưới (chỉ mình bạn biết).<br>
-    2) Tạo đề → bấm <b>Lưu đề (tạo mã)</b> → nhận link ngắn để gửi cho học sinh.
+    1) Dán <b>GitHub Token</b> (loại Classic Token đã tích chọn quyền <code>gist</code>) vào ô bên dưới.<br>
+    2) Thêm câu hỏi → bấm <b>Lưu đề (tạo mã)</b> → nhận link để gửi cho học sinh làm bài trên <code>do.html</code>.
   </p>
   <label>GitHub Token <span class="req">*</span></label>
-  <input type="text" id="token" placeholder="Dán token GitHub ở đây (chỉ hiện trên máy bạn, đừng commit lên GitHub)">
+  <input type="text" id="token" placeholder="Dán token GitHub ở đây">
 </div>
 
 <div class="card">
   <h2>Thông tin đề</h2>
-  <input type="text" id="quizTitle" placeholder="Tên đề (VD: Kiểm tra Toán 15 phút)">
+  <input type="text" id="quizTitle" placeholder="Tên đề (VD: Kiểm tra trắc nghiệm BHXH)">
 </div>
 
 <div class="card">
@@ -83,7 +83,6 @@ function addQuestion() {
   if (filledOpts.length < 2) { alert('Cần ít nhất 2 đáp án đã nhập'); return; }
   if (!allOpts[correctIndexRaw]) { alert('Đáp án đúng đang để trống'); return; }
 
-  // giữ đúng mapping theo thứ tự đã nhập (kể cả trống)
   const finalOpts = allOpts.filter(v=>v);
   const correctText = allOpts[correctIndexRaw];
   const correctIndex = finalOpts.indexOf(correctText);
@@ -157,14 +156,24 @@ async function saveToGist() {
 
     const json = await res.json();
     const gistId = json.id;
-    const baseUrl = window.location.origin + window.location.pathname.replace(/admin\.html$/,'');
-    const quizLink = baseUrl + 'do.html?code=' + gistId;
+
+    // Tự động thay thế file admin.html hiện tại thành do.html để link trỏ chuẩn xác sang trang làm bài
+    let path = window.location.pathname;
+    if (path.endsWith('admin.html')) {
+      path = path.replace('admin.html', 'do.html');
+    } else if (!path.endsWith('/')) {
+      path = path.substring(0, path.lastIndexOf('/') + 1) + 'do.html';
+    } else {
+      path = path + 'do.html';
+    }
+    const quizLink = window.location.origin + path + '?code=' + gistId;
 
     document.getElementById('resultArea').innerHTML = `
       <p><b>Lưu thành công!</b></p>
       <p>Mã đề (Gist ID): <code>${gistId}</code></p>
-      <p>Link gửi cho học sinh:</p>
+      <p>Link gửi cho học sinh (trỏ thẳng sang do.html):</p>
       <div class="link-box" id="quizLink">${quizLink}</div>
+      <br>
       <button class="btn btn-primary" onclick="copyLink()">📋 Sao chép link</button>
       <span id="copyMsg"></span>
     `;
