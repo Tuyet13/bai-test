@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Làm bài test</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font-family: Arial, sans-serif; background:#e5e7eb; padding:20px; }
+  .card { max-width:900px;margin:0 auto 20px;background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.1);}
+  h1 { text-align:center; }
+  input[type=text]{width:100%;padding:8px;margin:6px 0 10px;border-radius:4px;border:1px solid #ccc;}
+  .quiz-q{margin-bottom:20px;}
+  .q-text{font-weight:bold;margin-bottom:8px;}
+  .opt{display:block;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;margin-bottom:6px;cursor:pointer;}
+  .opt input{margin-right:8px;}
+  .opt.selected{background:#e0f2fe;border-color:#2563eb;}
+  .opt.right{background:#dcfce7;border-color:#16a34a;}
+  .opt.wrong{background:#fee2e2;border-color:#dc2626;}
+  .result-badge{font-size:12px;font-weight:bold;margin-left:4px;}
+  .btn{padding:10px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:bold;}
+  .btn-primary{background:#2563eb;color:#fff;width:100%;}
+  .score-box{text-align:center;background:#1d4ed8;color:#fff;padding:16px;border-radius:10px;}
+</style>
+</head>
+<body>
+<div class="card" id="loadingCard">
+  <h1>Đang tải đề...</h1>
+  <p>Nếu chờ lâu, hãy kiểm tra lại link hoặc hỏi người gửi đề.</p>
+</div>
+
+<div class="card" id="quizCard" style="display:none;">
+  <h1 id="quizTitle">Bài test</h1>
+  <input type="text" id="studentName" placeholder="Nhập tên của bạn...">
+</div>
+
+<div class="card" id="qsCard" style="display:none;">
+  <div id="quizQuestions"></div>
+  <button class="btn btn-primary" id="submitBtn" onclick="submitQuiz()">Nộp bài</button>
+</div>
+
+<div class="card" id="resultCard" style="display:none;">
+  <div class="score-box">
+    <div id="resultName"></div>
+    <div id="scoreText" style="font-size:32px;font-weight:bold;margin-top:6px;"></div>
+    <div id="scoreDetail" style="margin-top:4px;"></div>
+  </div>
+</div>
+
+<script>
+let quizData = null;
+
+function getQueryParam(name) {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+async function loadQuiz() {
+  const code = getQueryParam('code');
+  if (!code) {
+    document.getElementById('loadingCard').innerHTML = '<h1>Lỗi</h1><p>Thiếu mã đề (code). Hãy kiểm tra lại link.</p>';
+    return;
+  }
+  try {
+    const res = await fetch('https://api.github.com/gists/' + code);
+    if (!res.ok) throw new Error('Không tìm thấy đề. Mã: ' + res.status);
+    const gist = await res.json();
+    const files = gist.files || {};
+    const quizFile = files['quiz.json'];
+    if (!quizFile) throw new Error('Gist không chứa quiz.json');
+    quizData = JSON.parse(quizFile.content);
+
+    document.getElementById('loadingCard').style.display = 'none';
+    document.getElementById('quizCard').style.display = 'block';
+    document.getElementById('qsCard').style.display = 'block';
+    document.getElementById('quizTitle').textContent = quizData.t || 'Bài test';
+
+    const area = document.getElementById('quizQuestions');
+    area.innerHTML = quizData.q.map((q,i)=>`
+      <div class="quiz-q" id="q${i}">
+        <div class="q-text">Câu ${i+1}: ${esc(q.q)}</div>
+        ${q.o.map((o,j)=>`
+          <label class="opt" id="q${i}o${j}">
+            <input type="radio" name="q${i}" value="${j}" onchange="selectOpt(${i},${j})">
+            ${String.fromCharCode(65+j)}. ${esc(o)}
+          </label>
+        `).join('')}
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('loadingCard').innerHTML =
+      '<h1>Lỗi</h1><p>'+esc(e.message)+'</p>';
+  }
+}
+
+function selectOpt(i,j){
+  quizData.q[i].o.forEach((_,k)=>{
+    document.getElementById(`q${i}o${k}`).classList.remove('selected');
+  });
+  document.getElementById(`q${i}o${j}`).classList.add('selected');
+}
+
+function submitQuiz(){
+  const name = document.getElementById('studentName').value.trim();
+  if (!name) { alert('Vui lòng nhập tên của bạn'); return; }
+
+  let score = 0;
+  quizData.q.forEach((q,i)=>{
+    const chosen = document.querySelector(`input[name=q${i}]:checked`);
+    const chosenVal = chosen ? parseInt(chosen.value) : -1;
+    q.o.forEach((_,j)=>{
+      const el = document.getElementById(`q${i}o${j}`);
+      el.style.pointerEvents = 'none';
+      if (j === q.c) {
+        el.classList.add('right');
+        el.innerHTML += '<span class="result-badge" style="color:#16a34a">✔ Đúng</span>';
+      }
+      if (j === chosenVal && chosenVal !== q.c) {
+        el.classList.add('wrong');
+        el.innerHTML += '<span class="result-badge" style="color:#dc2626">✘ Bạn chọn</span>';
+      }
+    });
+    if (chosenVal === q.c) score++;
+  });
+
+  document.getElementById('submitBtn').style.display = 'none';
+  document.getElementById('resultCard').style.display = 'block';
+  document.getElementById('resultName').textContent = 'Tên: ' + name;
+  document.getElementById('scoreText').textContent = score + ' / ' + quizData.q.length;
+  const pct = Math.round(score / quizData.q.length * 100);
+  document.getElementById('scoreDetail').textContent =
+    pct>=80 ? `Xuất sắc (${pct}%)` : pct>=50 ? `Khá (${pct}%)` : `Cần cố gắng hơn (${pct}%)`;
+  document.getElementById('resultCard').scrollIntoView({behavior:'smooth'});
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+loadQuiz();
+</script>
+</body>
+</html>

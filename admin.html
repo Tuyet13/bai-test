@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Admin - Tạo đề thi</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font-family: Arial, sans-serif; background:#f3f4f6; padding:20px; }
+  .card { max-width:900px; margin:0 auto 20px; background:#fff; padding:20px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.1);}
+  h1 { text-align:center; }
+  input[type=text], textarea { width:100%; padding:8px; margin:6px 0 10px; border-radius:4px; border:1px solid #ccc; }
+  .opt-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .opt-row input[type=radio] { cursor:pointer; }
+  .btn { padding:10px 16px; border:none; border-radius:6px; cursor:pointer; font-weight:bold; }
+  .btn-primary { background:#2563eb; color:#fff; }
+  .btn-danger { background:#dc2626; color:#fff; padding:4px 10px; font-size:12px; float:right; }
+  .btn-success { background:#16a34a; color:#fff; width:100%; margin-top:10px; }
+  .q-item{background:#f9fafb;padding:10px;border-radius:8px;margin-bottom:8px;border-left:4px solid #2563eb;}
+  .q-title{font-weight:bold;margin-bottom:4px;}
+  .q-opt{margin-left:12px;}
+  .q-opt.correct{color:#16a34a;font-weight:bold;}
+  .hint{font-size:12px;color:#6b7280;}
+  .link-box{background:#e0f2fe;padding:10px;border-radius:8px;word-break:break-all;margin-top:8px;font-size:13px;}
+  #copyMsg{color:#16a34a;font-weight:bold;margin-left:8px;}
+  label span.req { color:red; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Admin - Tạo đề thi</h1>
+  <p class="hint">
+    1) Dán <b>GitHub Token</b> của bạn vào ô bên dưới (chỉ mình bạn biết).<br>
+    2) Tạo đề → bấm <b>Lưu đề (tạo mã)</b> → nhận link ngắn để gửi cho học sinh.
+  </p>
+  <label>GitHub Token <span class="req">*</span></label>
+  <input type="text" id="token" placeholder="Dán token GitHub ở đây (chỉ hiện trên máy bạn, đừng commit lên GitHub)">
+</div>
+
+<div class="card">
+  <h2>Thông tin đề</h2>
+  <input type="text" id="quizTitle" placeholder="Tên đề (VD: Kiểm tra Toán 15 phút)">
+</div>
+
+<div class="card">
+  <h2>Thêm câu hỏi</h2>
+  <textarea id="qText" rows="2" placeholder="Nhập nội dung câu hỏi..."></textarea>
+  <p class="hint">Nhập đáp án và chọn 1 đáp án đúng:</p>
+  <div id="optionsArea"></div>
+  <button class="btn btn-primary" onclick="addQuestion()">Thêm câu hỏi</button>
+</div>
+
+<div class="card">
+  <h2>Danh sách câu hỏi (<span id="qCount">0</span>)</h2>
+  <div id="questionList"><p class="hint">Chưa có câu hỏi nào.</p></div>
+  <button class="btn btn-success" onclick="saveToGist()">💾 Lưu đề (tạo mã)</button>
+  <div id="resultArea" style="margin-top:10px;"></div>
+</div>
+
+<script>
+let questions = [];
+
+function renderOptionInputs() {
+  const area = document.getElementById('optionsArea');
+  area.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    area.innerHTML += `
+      <div class="opt-row">
+        <input type="radio" name="correctOpt" value="${i}" ${i===0?'checked':''}>
+        <input type="text" class="optInput" placeholder="Đáp án ${String.fromCharCode(65+i)}">
+      </div>
+    `;
+  }
+}
+
+function addQuestion() {
+  const text = document.getElementById('qText').value.trim();
+  const allOptEls = Array.from(document.querySelectorAll('.optInput'));
+  const allOpts = allOptEls.map(i=>i.value.trim());
+  const filledOpts = allOpts.filter(v=>v);
+  const correctIndexRaw = parseInt(document.querySelector('input[name=correctOpt]:checked').value);
+
+  if (!text) { alert('Vui lòng nhập nội dung câu hỏi'); return; }
+  if (filledOpts.length < 2) { alert('Cần ít nhất 2 đáp án đã nhập'); return; }
+  if (!allOpts[correctIndexRaw]) { alert('Đáp án đúng đang để trống'); return; }
+
+  // giữ đúng mapping theo thứ tự đã nhập (kể cả trống)
+  const finalOpts = allOpts.filter(v=>v);
+  const correctText = allOpts[correctIndexRaw];
+  const correctIndex = finalOpts.indexOf(correctText);
+
+  questions.push({ q: text, o: finalOpts, c: correctIndex });
+  document.getElementById('qText').value = '';
+  renderOptionInputs();
+  renderQuestionList();
+}
+
+function renderQuestionList() {
+  const list = document.getElementById('questionList');
+  document.getElementById('qCount').textContent = questions.length;
+  if (!questions.length) {
+    list.innerHTML = '<p class="hint">Chưa có câu hỏi nào.</p>';
+    return;
+  }
+  list.innerHTML = questions.map((q,i)=>`
+    <div class="q-item">
+      <div class="q-title">
+        Câu ${i+1}: ${esc(q.q)}
+        <button class="btn btn-danger" onclick="removeQ(${i})">Xóa</button>
+      </div>
+      ${q.o.map((o,j)=>`
+        <div class="q-opt ${j===q.c?'correct':''}">
+          ${String.fromCharCode(65+j)}. ${esc(o)} ${j===q.c?'✔':''}
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function removeQ(i){ questions.splice(i,1); renderQuestionList(); }
+
+async function saveToGist() {
+  const token = document.getElementById('token').value.trim();
+  if (!token) { alert('Vui lòng dán GitHub Token'); return; }
+  if (!questions.length) { alert('Chưa có câu hỏi nào'); return; }
+
+  const title = document.getElementById('quizTitle').value.trim() || 'Bài test';
+  const data = { t: title, q: questions };
+
+  const body = {
+    description: "Quiz generated by admin.html",
+    public: false,
+    files: {
+      "quiz.json": {
+        content: JSON.stringify(data)
+      }
+    }
+  };
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Đang lưu...';
+
+  try {
+    const res = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error('Lỗi tạo Gist: ' + res.status + ' ' + t);
+    }
+
+    const json = await res.json();
+    const gistId = json.id;
+    const baseUrl = window.location.origin + window.location.pathname.replace(/admin\.html$/,'');
+    const quizLink = baseUrl + 'do.html?code=' + gistId;
+
+    document.getElementById('resultArea').innerHTML = `
+      <p><b>Lưu thành công!</b></p>
+      <p>Mã đề (Gist ID): <code>${gistId}</code></p>
+      <p>Link gửi cho học sinh:</p>
+      <div class="link-box" id="quizLink">${quizLink}</div>
+      <button class="btn btn-primary" onclick="copyLink()">📋 Sao chép link</button>
+      <span id="copyMsg"></span>
+    `;
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Lưu đề (tạo mã)';
+  }
+}
+
+function copyLink() {
+  const link = document.getElementById('quizLink').textContent;
+  navigator.clipboard.writeText(link).then(()=>{
+    document.getElementById('copyMsg').textContent = 'Đã sao chép!';
+    setTimeout(()=>document.getElementById('copyMsg').textContent='',2000);
+  });
+}
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+renderOptionInputs();
+</script>
+</body>
+</html>
